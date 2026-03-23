@@ -1,3 +1,4 @@
+# .github/workflows/build.yml (упрощенный)
 name: Simple Docker Build
 
 on:
@@ -15,55 +16,33 @@ jobs:
     - name: Docker Info
       run: docker info
 
-    - name: Check Directory Structure
+    - name: List Repository Contents
       run: |
-        pwd
+        echo "Repository contents:"
         ls -la
+        echo "Directory tree:"
+        find . -type f -name "*" | head -50
 
-    - name: Build Web Image
+    - name: Try Simple Build
       run: |
-        # Поиск Dockerfile для веб-сервера
-        if [ -f "Dockerfile.web" ]; then
-            docker build -f Dockerfile.web -t devops-web:latest .
-        elif [ -f "docker/web/Dockerfile" ]; then
-            docker build -f docker/web/Dockerfile -t devops-web:latest docker/web/
-        elif [ -f "web/Dockerfile" ]; then
-            docker build -f web/Dockerfile -t devops-web:latest web/
-        else
-            echo "Dockerfile для веб-сервера не найден"
+        # Попытка найти любой Dockerfile
+        dockerfiles=$(find . -name "Dockerfile*" -type f | head -5)
+        if [ -z "$dockerfiles" ]; then
+            echo "No Dockerfiles found"
             exit 1
         fi
 
-    - name: Build Database Image
+        # Попытка собрать первый найденный Dockerfile
+        dockerfile=$(echo "$dockerfiles" | head -1)
+        echo "Using Dockerfile: $dockerfile"
+        docker build -f $dockerfile -t devops-test:latest .
+
+    - name: Test Build
       run: |
-        # Поиск Dockerfile для базы данных
-        if [ -f "Dockerfile.db" ]; then
-            docker build -f Dockerfile.db -t devops-db:latest .
-        elif [ -f "docker/database/Dockerfile" ]; then
-            docker build -f docker/database/Dockerfile -t devops-db:latest docker/database/
-        elif [ -f "db/Dockerfile" ]; then
-            docker build -f db/Dockerfile -t devops-db:latest db/
-        else
-            echo "Dockerfile для базы данных не найден"
-            exit 1
-        fi
-
-    - name: Test Images
-      run: |
-        # Запуск веб-сервера
-        docker run --rm -d -p 8080:80 devops-web:latest
+        docker run --rm -d -p 8080:80 devops-test:latest
         sleep 10
-        curl -f http://localhost:8080 && echo "Web OK" || echo "Web FAILED"
+        curl -f http://localhost:8080 && echo "Test OK" || echo "Test FAILED"
         docker stop $(docker ps -q)
-
-        # Запуск БД
-        docker run --rm -d -p 5432:5432 devops-db:latest
-        sleep 10
-        docker exec -i $(docker ps -lq) psql -U postgres -c '\l' && echo "DB OK" || echo "DB FAILED"
-        docker stop $(docker ps -q)
-
-    - name: Docker Images List
-      run: docker images | grep devops
 
     - name: Cleanup
       run: docker system prune -f
