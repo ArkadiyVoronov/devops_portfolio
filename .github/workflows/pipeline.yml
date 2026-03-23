@@ -1,4 +1,4 @@
-name: Docker Build and Test
+name: Simple Docker Build
 
 on:
   push:
@@ -12,48 +12,35 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Docker Setup Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        buildkitd-flags: --allow insecure-entitlement=security.insecure
-
-    - name: Docker Build Web Image
-      uses: docker/build-push-action@v4
-      with:
-        context: ./docker/web/
-        file: ./docker/web/Dockerfile
-        push: false
-        tags: devops-web:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-
-    - name: Docker Build Database Image
-      uses: docker/build-push-action@v4
-      with:
-        context: ./docker/database/
-        file: ./docker/database/Dockerfile
-        push: false
-        tags: devops-db:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-
     - name: Docker Info
       run: docker info
 
-    - name: Buildx Version
-      run: docker buildx version
-
-    - name: Proxy Configuration
-      run: printenv | grep -i proxy
-
-    - name: Docker Images List
-      run: docker images
-
-    - name: Test Build
+    - name: Build Web Image
       run: |
+        cd docker/web
+        docker build -t devops-web:latest .
+
+    - name: Build Database Image
+      run: |
+        cd docker/database
+        docker build -t devops-db:latest .
+
+    - name: Test Images
+      run: |
+        # Запуск веб-сервера
         docker run --rm -d -p 8080:80 devops-web:latest
         sleep 10
-        curl -f http://localhost:8080
+        curl -f http://localhost:8080 || (echo "Web test failed" && exit 1)
         docker stop $(docker ps -q)
+
+        # Запуск базы данных
+        docker run --rm -d -p 5432:5432 devops-db:latest
+        sleep 10
+        docker exec -i $(docker ps -lq) psql -U devops -d devops_db -c '\l' || (echo "DB test failed" && exit 1)
+        docker stop $(docker ps -q)
+
+    - name: Docker Images List
+      run: docker images | grep devops
+
+    - name: Cleanup
+      run: docker system prune -f
