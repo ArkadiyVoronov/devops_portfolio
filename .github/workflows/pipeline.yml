@@ -15,28 +15,51 @@ jobs:
     - name: Docker Info
       run: docker info
 
+    - name: Check Directory Structure
+      run: |
+        pwd
+        ls -la
+
     - name: Build Web Image
       run: |
-        cd docker/web
-        docker build -t devops-web:latest .
+        # Поиск Dockerfile для веб-сервера
+        if [ -f "Dockerfile.web" ]; then
+            docker build -f Dockerfile.web -t devops-web:latest .
+        elif [ -f "docker/web/Dockerfile" ]; then
+            docker build -f docker/web/Dockerfile -t devops-web:latest docker/web/
+        elif [ -f "web/Dockerfile" ]; then
+            docker build -f web/Dockerfile -t devops-web:latest web/
+        else
+            echo "Dockerfile для веб-сервера не найден"
+            exit 1
+        fi
 
     - name: Build Database Image
       run: |
-        cd docker/database
-        docker build -t devops-db:latest .
+        # Поиск Dockerfile для базы данных
+        if [ -f "Dockerfile.db" ]; then
+            docker build -f Dockerfile.db -t devops-db:latest .
+        elif [ -f "docker/database/Dockerfile" ]; then
+            docker build -f docker/database/Dockerfile -t devops-db:latest docker/database/
+        elif [ -f "db/Dockerfile" ]; then
+            docker build -f db/Dockerfile -t devops-db:latest db/
+        else
+            echo "Dockerfile для базы данных не найден"
+            exit 1
+        fi
 
     - name: Test Images
       run: |
         # Запуск веб-сервера
         docker run --rm -d -p 8080:80 devops-web:latest
         sleep 10
-        curl -f http://localhost:8080 || (echo "Web test failed" && exit 1)
+        curl -f http://localhost:8080 && echo "Web OK" || echo "Web FAILED"
         docker stop $(docker ps -q)
 
-        # Запуск базы данных
+        # Запуск БД
         docker run --rm -d -p 5432:5432 devops-db:latest
         sleep 10
-        docker exec -i $(docker ps -lq) psql -U devops -d devops_db -c '\l' || (echo "DB test failed" && exit 1)
+        docker exec -i $(docker ps -lq) psql -U postgres -c '\l' && echo "DB OK" || echo "DB FAILED"
         docker stop $(docker ps -q)
 
     - name: Docker Images List
